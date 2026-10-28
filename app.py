@@ -298,6 +298,7 @@ class Window(QMainWindow):
         for r in self.history:
             card = QFrame()
             card.setObjectName('card')
+            card.setMinimumHeight(160)
             box = QVBoxLayout(card)
             box.setContentsMargins(16, 13, 16, 13)
             row = QHBoxLayout()
@@ -336,3 +337,4 @@ if __name__ == '__main__':
             app.quit()
         QTimer.singleShot(1500, finish_smoke)
     sys.exit(app.exec())
+
