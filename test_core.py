@@ -59,5 +59,27 @@ class CoreTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, text) as caught:
                     core.upload(CFG, 'x.png', PNG)
                 self.assertNotIn(CFG['token'], str(caught.exception))
+    def test_optional_backup_preserves_bytes_and_link(self):
+        record = dict(name='原图.png', url='https://example.com/image.png', markdown='![原图](https://example.com/image.png)')
+        with tempfile.TemporaryDirectory(dir='.') as folder, patch.object(core, 'upload', side_effect=lambda *a: record.copy()):
+            plain = core.upload_with_backup(CFG, '原图.png', PNG)
+            self.assertNotIn('backup_path', plain)
+            saved = core.upload_with_backup(CFG, '原图.png', PNG, folder)
+            image = Path(saved['backup_path'])
+            self.assertEqual(image.read_bytes(), PNG)
+            import json
+            metadata = json.loads(image.with_suffix('.png.json').read_text(encoding='utf-8'))
+            self.assertEqual(metadata['url'], record['url'])
+            self.assertEqual(metadata['markdown'], record['markdown'])
+            self.assertNotIn(CFG['token'], image.with_suffix('.png.json').read_text(encoding='utf-8'))
+    def test_backup_failure_keeps_successful_upload_link(self):
+        record = dict(url='https://example.com/image.png')
+        with tempfile.TemporaryDirectory(dir='.') as folder, patch.object(core, 'upload', return_value=record):
+            invalid_folder = Path(folder) / 'file.txt'
+            invalid_folder.write_text('existing')
+            saved = core.upload_with_backup(CFG, 'x.png', PNG, invalid_folder)
+            self.assertEqual(saved['url'], record['url'])
+            self.assertIn('backup_error', saved)
+            self.assertEqual(invalid_folder.read_text(), 'existing')
 
 if __name__ == '__main__': unittest.main()
