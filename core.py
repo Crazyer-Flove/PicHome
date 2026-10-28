@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import re
+import socket
+import ssl
 import uuid
 from datetime import datetime
 from urllib.request import Request, urlopen
@@ -95,8 +97,23 @@ def api(cfg, path, payload=None):
                     404: '仓库或分支不存在，或 Token 无权访问此仓库。', 409: '仓库发生并发修改，请重试。',
                     422: 'GitHub 未接受此上传，请检查分支和目录设置。'}
         raise ValueError(messages.get(error.code, f'GitHub 返回错误 {error.code}，请稍后重试。')) from None
-    except (URLError, TimeoutError, OSError):
-        raise ValueError('无法连接 GitHub，请检查网络后重试。') from None
+    except (URLError, TimeoutError, OSError) as error:
+        reason = error.reason if isinstance(error, URLError) else error
+        if isinstance(reason, FileNotFoundError):
+            message = 'HTTPS 组件文件缺失，请使用修复后的新版 Luma。无需重新申请 Token。'
+        elif isinstance(reason, ssl.SSLCertVerificationError):
+            message = 'HTTPS 证书验证失败，请检查系统时间、系统证书或代理的证书配置。'
+        elif isinstance(reason, ssl.SSLError):
+            message = 'HTTPS 握手失败，请检查代理连接后重试。'
+        elif isinstance(reason, (TimeoutError, socket.timeout)):
+            message = '连接 GitHub 超时，请检查网络和系统代理后重试。'
+        elif isinstance(reason, socket.gaierror):
+            message = '无法解析 api.github.com，请检查 DNS 和网络连接。'
+        elif isinstance(reason, ConnectionRefusedError):
+            message = '连接被拒绝，请确认网络或系统代理服务正在运行。'
+        else:
+            message = '无法连接 GitHub，请检查网络和系统代理后重试。'
+        raise ValueError(message) from None
 
 def check_connection(cfg):
     validate_config(cfg)
