@@ -4,7 +4,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal, QBuffer, QIODevice, QUrl, QTimer
 from PySide6.QtGui import QDesktopServices, QFont, QFontDatabase, QKeySequence, QShortcut, QPixmap, QIcon, QPainter, QColor
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFileDialog, QScrollArea, QFrame, QLineEdit, QDialog, QFormLayout, QMessageBox, QProgressBar)
+    QFileDialog, QScrollArea, QFrame, QLineEdit, QDialog, QFormLayout, QMessageBox, QProgressBar, QLayout)
 from core import load_config, save_config, read_json, write_json, upload, check_connection, validate_config, MAX_BYTES
 
 STYLE = '''
@@ -206,6 +206,7 @@ class Window(QMainWindow):
         scroll.setWidgetResizable(True)
         self.cards = QWidget()
         self.card_layout = QVBoxLayout(self.cards)
+        self.card_layout.setSizeConstraint(QLayout.SetMinAndMaxSize)
         self.card_layout.setContentsMargins(0, 0, 8, 0)
         self.card_layout.setAlignment(Qt.AlignTop)
         scroll.setWidget(self.cards)
@@ -298,7 +299,7 @@ class Window(QMainWindow):
         for r in self.history:
             card = QFrame()
             card.setObjectName('card')
-            card.setMinimumHeight(160)
+            card.setFixedHeight(160)
             box = QVBoxLayout(card)
             box.setContentsMargins(16, 13, 16, 13)
             row = QHBoxLayout()
@@ -337,4 +338,3 @@ if __name__ == '__main__':
             app.quit()
         QTimer.singleShot(1500, finish_smoke)
     sys.exit(app.exec())
-

@@ -55,6 +55,9 @@ with tempfile.TemporaryDirectory(dir='.') as folder, patch.object(core, 'APP_DIR
     a.processEvents()
     settings.grab().save('settings-preview.png')
     settings.close()
+    for _ in range(8): a.processEvents()
+    cards = [w.card_layout.itemAt(i).widget() for i in range(w.card_layout.count())]
+    assert all(b.y() >= a.y() + a.height() for a, b in zip(cards, cards[1:]))
     w.grab().save('history-preview.png')
     w.history = []
     w.render_history()
