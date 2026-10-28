@@ -31,3 +31,4 @@ Windows x64 + Python 3.10 或更高版本，运行 `powershell -ExecutionPolicy 
 
 `python -m unittest -v test_core` 检查上传负载、固定提交链接、随机文件名、Windows 凭据加密、文件限制和错误处理。公开仓库示例图片用于验证 GitHub 直链；客户端上传需要配置个人 Token。
 
+修复版本补齐构建环境 SSL 模块所依赖的证书数据文件，解决独立 exe 在初始化 HTTPS 时报告文件缺失的问题；保持 HTTPS 证书验证。`Luma.exe --network-test` 可进行不读取 Token 的公开连通性检查，结果写入当前目录 `network-check.json`。
