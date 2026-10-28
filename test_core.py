@@ -4,7 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
+import ssl
+import socket
 import core
 
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1cAAAAASUVORK5CYII=')
@@ -46,5 +48,16 @@ class CoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '公开仓库'): core.check_connection(CFG)
     def test_traversal_rejected(self):
         with self.assertRaises(ValueError): core.validate_config(CFG | {'folder': '../oops'})
+    def test_network_errors_are_actionable_without_secrets(self):
+        cases = [(FileNotFoundError(), '组件文件缺失'),
+                 (URLError(ssl.SSLCertVerificationError()), '证书验证失败'),
+                 (URLError(socket.gaierror()), '无法解析'),
+                 (URLError(ConnectionRefusedError()), '连接被拒绝'),
+                 (URLError(TimeoutError()), '超时')]
+        for error, text in cases:
+            with self.subTest(text=text), patch.object(core, 'urlopen', side_effect=error):
+                with self.assertRaisesRegex(ValueError, text) as caught:
+                    core.upload(CFG, 'x.png', PNG)
+                self.assertNotIn(CFG['token'], str(caught.exception))
 
 if __name__ == '__main__': unittest.main()
