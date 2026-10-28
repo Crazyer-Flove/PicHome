@@ -325,6 +325,12 @@ class Window(QMainWindow):
         else: event.accept()
 
 if __name__ == '__main__':
+    if '--network-test' in sys.argv:
+        import json
+        from diagnose_network import run_checks
+        results = run_checks()
+        Path('network-check.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
+        sys.exit(0 if all(r.get('status') == 200 for r in results) else 1)
     app = QApplication(sys.argv)
     init_fonts()
     app.setStyle('Fusion')
