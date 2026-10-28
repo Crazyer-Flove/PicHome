@@ -4,8 +4,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal, QBuffer, QIODevice, QUrl, QTimer
 from PySide6.QtGui import QDesktopServices, QFont, QFontDatabase, QKeySequence, QShortcut, QPixmap, QIcon, QPainter, QColor
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFileDialog, QScrollArea, QFrame, QLineEdit, QDialog, QFormLayout, QMessageBox, QProgressBar, QLayout)
-from core import load_config, save_config, read_json, write_json, upload, check_connection, validate_config, MAX_BYTES
+    QFileDialog, QScrollArea, QFrame, QLineEdit, QDialog, QFormLayout, QMessageBox, QProgressBar, QLayout,
+    QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView)
+from core import load_config, save_config, read_json, write_json, upload_with_backup, check_connection, validate_config, MAX_BYTES
 
 STYLE = '''
 QWidget { background:#111516; color:#e9eeee; font-family:'Segoe UI','Microsoft YaHei UI'; font-size:14px; }
@@ -27,6 +28,12 @@ QProgressBar {border:0; background:#253232; height:3px; border-radius:1px;}
 QProgressBar::chunk {background:#b4e5cf;}
 QScrollBar:vertical {background:#111516; width:8px;}
 QScrollBar::handle:vertical {background:#3b4b49; min-height:30px; border-radius:4px;}
+QTableWidget {background:#171e1f; gridline-color:#2c3738; border:1px solid #354344; selection-background-color:#34584b;}
+QTableWidget::item {padding:8px;}
+QHeaderView::section {background:#263332; color:#b4ceca; border:0; padding:10px;}
+QCheckBox {spacing:8px;}
+QCheckBox::indicator {width:16px; height:16px; border:1px solid #6b8a80; border-radius:4px; background:#17211e;}
+QCheckBox::indicator:checked {background:#b4e5cf;}
 '''
 
 def label(text, role=None):
@@ -159,6 +166,112 @@ class DropZone(QFrame):
         if e.mimeData().hasUrls(): self.owner.add_files([u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()])
         elif e.mimeData().hasImage(): self.owner.add_image(e.mimeData().imageData())
 
+class LinkLibrary(QDialog):
+    PAGE_SIZE = 100
+
+    def __init__(self, owner):
+        super().__init__(owner)
+        self.owner = owner
+        self.page = 0
+        self.visible = []
+        self.filtered = []
+        self.setWindowTitle('Luma · 图片链接库')
+        self.resize(1080, 660)
+        self.setMinimumSize(820, 500)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.addWidget(label('每一张图片，都有迹可循。', 'title'))
+        layout.addWidget(label('保留本机上传记录 · 支持多选复制 · 双击记录打开图片', 'muted'))
+        self.search = QLineEdit()
+        self.search.setPlaceholderText('搜索图片名称、链接或上传时间…')
+        self.search.textChanged.connect(self.refresh)
+        layout.addWidget(self.search)
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(['图片名称', '上传时间', '图片直链', '本地备份'])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setWordWrap(False)
+        self.table.verticalHeader().hide()
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.setColumnWidth(0, 170)
+        self.table.setColumnWidth(1, 145)
+        self.table.setColumnWidth(3, 100)
+        self.table.cellDoubleClicked.connect(lambda row, _: QDesktopServices.openUrl(QUrl(self.visible[row]['url'])))
+        layout.addWidget(self.table, 1)
+        navigation = QHBoxLayout()
+        self.count = label('', 'muted')
+        navigation.addWidget(self.count)
+        navigation.addStretch()
+        self.previous = button('上一页', lambda: self.change_page(-1))
+        self.next = button('下一页', lambda: self.change_page(1))
+        navigation.addWidget(self.previous)
+        navigation.addWidget(self.next)
+        layout.addLayout(navigation)
+        actions = QHBoxLayout()
+        actions.addWidget(button('复制选中直链', lambda: self.copy_selected('url'), True))
+        actions.addWidget(button('复制选中 Markdown', lambda: self.copy_selected('markdown')))
+        actions.addWidget(button('复制筛选结果', self.copy_filtered))
+        actions.addStretch()
+        actions.addWidget(button('导出链接 CSV', self.export_links))
+        layout.addLayout(actions)
+        self.message = label('按住 Ctrl 或 Shift 可选择多条记录。', 'muted')
+        layout.addWidget(self.message)
+        self.refresh()
+
+    def refresh(self, *_):
+        self.page = 0
+        query = self.search.text().strip().casefold()
+        self.filtered = [r for r in self.owner.history if query in ' '.join(str(r.get(k, '')) for k in ('name', 'url', 'time')).casefold()]
+        self.render_page()
+
+    def render_page(self):
+        self.visible = self.filtered[self.page * self.PAGE_SIZE:(self.page + 1) * self.PAGE_SIZE]
+        self.table.setRowCount(len(self.visible))
+        for row, record in enumerate(self.visible):
+            for column, value in enumerate((record['name'], record['time'], record['url'],
+                                           '备份异常' if record.get('backup_error') else ('已备份' if record.get('backup_path') else '未备份'))):
+                item = QTableWidgetItem(value)
+                item.setToolTip(record.get('backup_path', '') if column == 3 else value)
+                self.table.setItem(row, column, item)
+            self.table.setRowHeight(row, 42)
+        total_pages = max(1, (len(self.filtered) + self.PAGE_SIZE - 1) // self.PAGE_SIZE)
+        self.count.setText(f'共 {len(self.owner.history)} 条 · 匹配 {len(self.filtered)} 条 · 第 {self.page + 1} / {total_pages} 页')
+        self.previous.setEnabled(self.page > 0)
+        self.next.setEnabled(self.page + 1 < total_pages)
+
+    def change_page(self, delta):
+        self.page += delta
+        self.render_page()
+
+    def copy_selected(self, key):
+        rows = sorted({index.row() for index in self.table.selectionModel().selectedRows()})
+        if not rows:
+            self.message.setText('请先选中要复制的图片记录。')
+            return
+        self.owner.copy('\n'.join(self.visible[row][key] for row in rows))
+        self.message.setText(f'已复制 {len(rows)} 条链接。')
+
+    def copy_filtered(self):
+        self.owner.copy('\n'.join(record['url'] for record in self.filtered))
+        self.message.setText(f'已复制全部 {len(self.filtered)} 条筛选结果的直链。')
+
+    def export_links(self):
+        path, _ = QFileDialog.getSaveFileName(self, '导出当前筛选结果', 'Luma-links.csv', 'CSV 文件 (*.csv)')
+        if not path: return
+        import csv
+        try:
+            with open(path, 'w', encoding='utf-8-sig', newline='') as stream:
+                writer = csv.writer(stream)
+                writer.writerow(['图片名称', '上传时间', '图片直链', 'Markdown', '本地备份'])
+                for record in self.filtered:
+                    # Keep user-controlled file names from becoming spreadsheet formulas.
+                    values = [record.get(key, '') for key in ('name', 'time', 'url', 'markdown', 'backup_path')]
+                    writer.writerow(["'" + value if value.startswith(('=', '+', '-', '@', '\t', '\r', '\n')) else value for value in values])
+            self.message.setText(f'已导出 {len(self.filtered)} 条链接。')
+        except OSError:
+            self.message.setText('导出失败，请检查目标文件是否被占用或目录是否可写。')
+
 class Window(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -177,6 +290,9 @@ class Window(QMainWindow):
         self.queue = []
         self.worker = None
         self.busy = False
+        preferences = read_json('preferences.json', {})
+        self.backup_folder = preferences.get('backup_folder', '')
+        self.library = None
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
@@ -193,6 +309,16 @@ class Window(QMainWindow):
         self.destination = label('', 'muted')
         layout.addWidget(self.destination)
         layout.addWidget(DropZone(self))
+        backup_row = QHBoxLayout()
+        self.backup_toggle = QCheckBox('本次上传同时备份原图到本机')
+        self.backup_toggle.toggled.connect(self.backup_toggled)
+        backup_row.addWidget(self.backup_toggle)
+        backup_row.addStretch()
+        backup_row.addWidget(button('选择备份目录', self.choose_backup_folder))
+        layout.addLayout(backup_row)
+        self.backup_label = label(self.backup_folder or '未选择备份目录 · 备份包含原图与对应链接信息', 'muted')
+        self.backup_label.setWordWrap(True)
+        layout.addWidget(self.backup_label)
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.hide()
@@ -200,6 +326,7 @@ class Window(QMainWindow):
         recent = QHBoxLayout()
         recent.addWidget(label('最近上传'))
         recent.addStretch()
+        recent.addWidget(button('图片链接库', self.show_library, True))
         recent.addWidget(button('复制全部 Markdown', self.copy_all))
         layout.addLayout(recent)
         scroll = QScrollArea()
@@ -219,6 +346,25 @@ class Window(QMainWindow):
         self.update_destination()
         self.render_history()
     def update_destination(self): self.destination.setText(f"{self.cfg['repo']}  /  {self.cfg['folder']}  ·  {self.cfg['branch']}")
+    def choose_backup_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, '选择本地图片备份目录', self.backup_folder)
+        if folder:
+            self.backup_folder = folder
+            self.backup_label.setText(folder)
+            try: write_json('preferences.json', {'backup_folder': folder})
+            except OSError: self.status.setText('目录本次可用，但无法保存目录偏好。')
+        return bool(folder)
+    def backup_toggled(self, enabled):
+        if enabled and not self.backup_folder and not self.choose_backup_folder():
+            self.backup_toggle.setChecked(False)
+    def backup_options(self):
+        return self.backup_folder if self.backup_toggle.isChecked() else ''
+    def show_library(self):
+        if self.library is None: self.library = LinkLibrary(self)
+        self.library.refresh()
+        self.library.show()
+        self.library.raise_()
+        self.library.activateWindow()
     def settings(self):
         dlg = Settings(self)
         if dlg.exec():
@@ -233,7 +379,7 @@ class Window(QMainWindow):
         self.add_files(files)
     def add_files(self, files):
         if not files or not self.ready(): return
-        self.queue.extend(('file', f) for f in files)
+        self.queue.extend(('file', f, self.backup_options()) for f in files)
         self.next_upload()
     def paste(self):
         # Preserve normal editing/paste behavior inside settings and text fields.
@@ -247,11 +393,11 @@ class Window(QMainWindow):
         buffer = QBuffer()
         buffer.open(QIODevice.WriteOnly)
         image.save(buffer, 'PNG')
-        self.queue.append(('bytes', ('截图.png', bytes(buffer.data()))))
+        self.queue.append(('bytes', ('截图.png', bytes(buffer.data())), self.backup_options()))
         self.next_upload()
     def next_upload(self):
         if self.busy or not self.queue: return
-        kind, item = self.queue.pop(0)
+        kind, item, backup_folder = self.queue.pop(0)
         cfg = self.cfg.copy()
         def task():
             if kind == 'file':
@@ -260,7 +406,7 @@ class Window(QMainWindow):
                 name, data = path.name, path.read_bytes()
             else: name, data = item
             check_connection(cfg)
-            return upload(cfg, name, data)
+            return upload_with_backup(cfg, name, data, backup_folder)
         self.busy = True
         self.settings_button.setEnabled(False)
         self.progress.show()
@@ -275,11 +421,12 @@ class Window(QMainWindow):
         QMessageBox.warning(self, 'Luma · 上传失败', message + '\n请修正问题后重新选择或粘贴该图片。')
     def uploaded(self, record):
         self.history.insert(0, record)
-        self.history = self.history[:500]
         try: write_json('history.json', self.history)
         except OSError: self.status.setText('上传成功，但本地历史保存失败；请立即复制链接。')
-        else: self.status.setText('上传成功 · 链接已保存到本地历史')
+        else:
+            self.status.setText(record.get('backup_error') or ('上传成功 · 原图与链接已备份到本机' if record.get('backup_path') else '上传成功 · 链接已保存到图片链接库'))
         self.render_history()
+        if self.library is not None: self.library.refresh()
     def finished_upload(self):
         self.busy = False
         self.settings_button.setEnabled(True)
@@ -296,7 +443,7 @@ class Window(QMainWindow):
             if w: w.deleteLater()
         if not self.history:
             self.card_layout.addWidget(label('还没有上传记录。你的第一张图片，从这里开始。', 'muted'))
-        for r in self.history:
+        for r in self.history[:20]:
             card = QFrame()
             card.setObjectName('card')
             card.setFixedHeight(160)
