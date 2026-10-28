@@ -135,3 +135,20 @@ def upload(cfg, name, data):
     url = 'https://raw.githubusercontent.com/' + cfg['repo'] + '/' + sha + '/' + quote(path, safe='/')
     alt = Path(name).stem.replace('[', '').replace(']', '').replace('\n', ' ')
     return dict(name=name, url=url, markdown=f'![{alt}]({url})', path=path, time=datetime.now().strftime('%Y-%m-%d %H:%M'), sha=sha)
+
+def upload_with_backup(cfg, name, data, backup_folder=''):
+    record = upload(cfg, name, data)
+    if backup_folder:
+        try:
+            folder = Path(backup_folder) / datetime.now().strftime('%Y-%m')
+            folder.mkdir(parents=True, exist_ok=True)
+            image = folder / (uuid.uuid4().hex + image_extension(data))
+            # Never overwrite a user's existing file.
+            with image.open('xb') as stream:
+                stream.write(data)
+            record['backup_path'] = str(image.resolve())
+            image.with_suffix(image.suffix + '.json').write_text(
+                json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
+        except OSError:
+            record['backup_error'] = '图片已上传，但本地备份失败，请检查备份目录权限与磁盘空间。'
+    return record
