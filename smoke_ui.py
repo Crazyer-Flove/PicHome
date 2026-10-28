@@ -31,10 +31,14 @@ with tempfile.TemporaryDirectory(dir='.') as folder, patch.object(core, 'APP_DIR
     image.fill(Qt.green)
     image_path = str(Path(folder).resolve() / 'sample.png')
     image.save(image_path)
+    w.backup_folder = str(Path(folder).resolve() / 'backups')
+    w.backup_toggle.setChecked(True)
     with patch.object(app.QFileDialog, 'getOpenFileNames', return_value=([image_path], '')):
         w.choose_files()
+    w.backup_toggle.setChecked(False)
     a.clipboard().setImage(image)
     w.paste()
+    w.backup_toggle.setChecked(True)
     mime = QMimeData()
     mime.setUrls([QUrl.fromLocalFile(image_path)])
     drop = QDropEvent(QPointF(30, 30), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
@@ -46,10 +50,46 @@ with tempfile.TemporaryDirectory(dir='.') as folder, patch.object(core, 'APP_DIR
         time.sleep(.01)
     assert len(w.history) == 3, len(w.history)
     assert len({r['path'] for r in w.history}) == 3
+    assert sum(bool(r.get('backup_path')) for r in w.history) == 2
+    for r in w.history:
+        if r.get('backup_path'):
+            assert Path(r['backup_path']).is_file()
+            assert Path(r['backup_path'] + '.json').is_file()
     w.copy(w.history[0]['url'])
     assert a.clipboard().text() == w.history[0]['url']
     w.copy_all()
     assert a.clipboard().text().count('https://') == 3
+    assert len(core.read_json('history.json', [])) == 3
+    w.show_library()
+    library = w.library
+    library.table.selectRow(0)
+    library.copy_selected('url')
+    assert a.clipboard().text() == w.history[0]['url']
+    library.copy_selected('markdown')
+    assert a.clipboard().text() == w.history[0]['markdown']
+    library.search.setText('截图')
+    assert len(library.filtered) == 1
+    export_path = str(Path(folder) / 'links.csv')
+    with patch.object(app.QFileDialog, 'getSaveFileName', return_value=(export_path, '')):
+        library.export_links()
+    import csv
+    with open(export_path, encoding='utf-8-sig', newline='') as stream:
+        rows = list(csv.reader(stream))
+    assert len(rows) == 2 and rows[1][2] == library.filtered[0]['url']
+    library.search.clear()
+    original_history = w.history.copy()
+    w.history = [dict(original_history[0], name=f'history-{i}.png') for i in range(505)]
+    w.uploaded(dict(original_history[0], name='new.png'))
+    assert len(core.read_json('history.json', [])) == 506
+    assert len(library.visible) == 100
+    library.change_page(5)
+    assert len(library.visible) == 6
+    w.history = original_history
+    library.refresh()
+    for _ in range(8): a.processEvents()
+    library.grab().save('library-preview.png')
+    library.close()
+    w.render_history()
     settings = app.Settings(w)
     settings.show()
     a.processEvents()
@@ -64,4 +104,4 @@ with tempfile.TemporaryDirectory(dir='.') as folder, patch.object(core, 'APP_DIR
     a.processEvents()
     w.grab().save('preview.png')
     w.close()
-print('PASS: file picker, clipboard screenshot, file drop, serial upload, history, direct link and Markdown copy; mocked GitHub')
+print('PASS: upload entry points, optional per-batch image/link backup, persistent unlimited history, library pagination/search/copy/CSV export; mocked GitHub')
