@@ -7,7 +7,7 @@ import time
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
-from PySide6.QtCore import QMimeData, QUrl, QPointF, Qt
+from PySide6.QtCore import QMimeData, QUrl, QPointF, Qt, QEvent
 from PySide6.QtGui import QImage, QDropEvent
 from PySide6.QtWidgets import QApplication
 import core
@@ -101,7 +101,11 @@ with tempfile.TemporaryDirectory(dir='.') as folder, patch.object(core, 'APP_DIR
     w.grab().save('history-preview.png')
     w.history = []
     w.render_history()
-    a.processEvents()
+    w.backup_toggle.setChecked(False)
+    w.backup_label.setText('未选择备份目录 · 备份包含原图与对应链接信息')
+    w.status.setText('就绪 · 图片公开可访问 · 单张最大 20 MB')
+    a.sendPostedEvents(None, QEvent.DeferredDelete)
+    for _ in range(12): a.processEvents()
     w.grab().save('preview.png')
     w.close()
 print('PASS: upload entry points, optional per-batch image/link backup, persistent unlimited history, library pagination/search/copy/CSV export; mocked GitHub')

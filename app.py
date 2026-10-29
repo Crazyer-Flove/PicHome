@@ -9,31 +9,36 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 from core import load_config, save_config, read_json, write_json, upload_with_backup, check_connection, validate_config, MAX_BYTES
 
 STYLE = '''
-QWidget { background:#111516; color:#e9eeee; font-family:'Segoe UI','Microsoft YaHei UI'; font-size:14px; }
+QWidget { background:#f7f8fa; color:#202b35; font-family:'Segoe UI','Microsoft YaHei UI'; font-size:14px; }
 QLabel#brand {font-size:28px; font-weight:600; letter-spacing:3px;}
 QLabel#title {font-size:29px; font-weight:600;}
-QLabel#muted {color:#8b9b9b; font-size:13px;}
-QFrame#drop {border:1px dashed #45635c; border-radius:18px; background:#171f1e;}
+QLabel#muted {color:#657583; font-size:13px;}
+QFrame#drop {border:1px dashed #c2d4cc; border-radius:18px; background:#ffffff;}
 QFrame#drop QLabel {background:transparent;}
-QFrame#card {background:#1b2223; border:1px solid #2c3738; border-radius:12px;}
+QFrame#card {background:#ffffff; border:1px solid #e1e7eb; border-radius:12px;}
 QFrame#card QLabel {background:transparent;}
-QPushButton {background:#273233; border:1px solid #354344; border-radius:8px; padding:10px 17px;}
-QPushButton:hover {background:#354645; border-color:#6a9b8c;}
-QPushButton:disabled {color:#637373; background:#222a2a;}
-QPushButton#primary {background:#b4e5cf; color:#12221c; border:0; font-weight:600;}
-QPushButton#primary:hover {background:#d0f4e2;}
-QLineEdit {background:#101516; border:1px solid #364747; border-radius:7px; padding:10px; selection-background-color:#467666;}
+QPushButton {background:#ffffff; border:1px solid #dce3e7; border-radius:8px; padding:10px 17px;}
+QPushButton:hover {background:#eef5f1; border-color:#9cbfaf;}
+QPushButton:pressed {background:#e0ece5;}
+QPushButton:focus {border:1px solid #34795d;}
+QPushButton:disabled {color:#8b969e; background:#f0f2f4; border-color:#e5e9ec;}
+QPushButton#primary {background:#246b50; color:#ffffff; border:1px solid #246b50; font-weight:600;}
+QPushButton#primary:hover {background:#1a573f;}
+QLineEdit {background:#ffffff; border:1px solid #dce3e7; border-radius:7px; padding:10px; selection-background-color:#d4e8dc; selection-color:#183c2b;}
+QLineEdit:focus {border-color:#34795d;}
 QScrollArea {border:0;}
-QProgressBar {border:0; background:#253232; height:3px; border-radius:1px;}
-QProgressBar::chunk {background:#b4e5cf;}
-QScrollBar:vertical {background:#111516; width:8px;}
-QScrollBar::handle:vertical {background:#3b4b49; min-height:30px; border-radius:4px;}
-QTableWidget {background:#171e1f; gridline-color:#2c3738; border:1px solid #354344; selection-background-color:#34584b;}
+QProgressBar {border:0; background:#e4ebe7; height:3px; border-radius:1px;}
+QProgressBar::chunk {background:#34795d;}
+QScrollBar:vertical {background:#f7f8fa; width:8px;}
+QScrollBar::handle:vertical {background:#c6d1cd; min-height:30px; border-radius:4px;}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {height:0;}
+QTableWidget {background:#ffffff; gridline-color:#edf0f2; border:1px solid #e1e7eb; selection-background-color:#dfede5; selection-color:#183c2b;}
 QTableWidget::item {padding:8px;}
-QHeaderView::section {background:#263332; color:#b4ceca; border:0; padding:10px;}
+QHeaderView::section {background:#eef3f0; color:#40594c; border:0; padding:10px; font-weight:600;}
 QCheckBox {spacing:8px;}
-QCheckBox::indicator {width:16px; height:16px; border:1px solid #6b8a80; border-radius:4px; background:#17211e;}
-QCheckBox::indicator:checked {background:#b4e5cf;}
+QCheckBox::indicator {width:16px; height:16px; border:1px solid #a8b8af; border-radius:4px; background:#ffffff;}
+QCheckBox::indicator:checked {background:#246b50; border-color:#246b50;}
+QToolTip {background:#ffffff; color:#202b35; border:1px solid #dce3e7; padding:5px;}
 '''
 
 def label(text, role=None):
@@ -50,10 +55,10 @@ def button(text, callback, primary=False):
 
 def make_icon():
     pix = QPixmap(128, 128)
-    pix.fill(QColor('#142521'))
+    pix.fill(QColor('#246b50'))
     p = QPainter(pix)
     p.setRenderHint(QPainter.Antialiasing)
-    p.setPen(QColor('#b4e5cf'))
+    p.setPen(QColor('#ffffff'))
     p.setFont(QFont('Segoe UI', 70, QFont.Light))
     p.drawText(pix.rect(), Qt.AlignCenter, 'L')
     p.end()
@@ -144,7 +149,7 @@ class DropZone(QFrame):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignCenter)
         arrow = label('↑')
-        arrow.setStyleSheet('font-size:38px; color:#b4e5cf;')
+        arrow.setStyleSheet('font-size:38px; color:#34795d;')
         arrow.setAlignment(Qt.AlignCenter)
         layout.addWidget(arrow)
         title = label('让每张图片，都有一个归处')
